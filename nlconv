@@ -1,0 +1,118 @@
+#!/bin/sh
+# the next line restarts using tclsh \
+exec tclsh "$0" "$@"
+# nlconv -- simple command-line newline converter
+# 
+# The MIT License (MIT)
+# 
+# Copyright (c) 2013 Andrew D. Ball
+# 
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+# 
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+
+################# query ##############################
+# return the newline type of a file specified by
+# filename as one of lf, crlf, or cr
+proc query { filename } {
+    set fd [open $filename r]
+    fconfigure $fd -translation binary
+    set text [read $fd]
+    close $fd
+    
+    if { [regexp "\r\n" $text] } {
+	return "crlf"
+    } elseif { [regexp "\r" $text] } {
+	return "cr"
+    } elseif { [regexp "\n" $text] } {
+	return "lf"
+    }
+    # perhaps the file contains no newlines at all if we reach this point
+    return "unknown"
+}
+
+################# convert ############################
+# convert the file specified by filename to format
+# specified by target (one of lf, crlf, or cr)
+proc convert { filename target } {
+    # read in the entire file
+    set fd [open $filename r]
+    # this converts all newline types to plain \n on input
+    fconfigure $fd -translation auto  
+    set text [read $fd]
+    close $fd
+
+    # write the same file back, with the right newline type
+    set fd [open $filename w]
+    # this converts the \n's to the target newline type on output
+    fconfigure $fd -translation $target
+    puts -nonewline $fd $text
+    close $fd
+}
+
+proc print_usage { } {
+    puts {usage: nlconv query [filelist]}
+    puts {    or nlconv [targetformat] [filelist]}
+    puts {where [targetformat] is one of cr, crlf, or lf}
+}
+
+if {$argc < 1} {
+    print_usage 
+    exit
+}
+
+# handle query mode
+if {[lindex $argv 0] == "query"} {
+    for {set i 1} {$i < $argc} {incr i} {
+        set fn [lindex $argv $i] 
+        if {![file isdirectory $fn] && [file readable $fn]} {
+            puts "$fn\t[query $fn]"
+        } elseif {[file isdirectory $fn]} {
+            puts "$fn\tis a directory"
+        } else {
+            puts "$fn\tpermission denied"
+        } 
+    }
+    exit
+} 
+
+# check to see if first argument is a valid target newline format
+# if not, print usage message and exit
+switch [lindex $argv 0] {
+    cr { set target cr }
+    crlf { set target crlf }
+    lf { set target lf }
+    default { 
+        print_usage
+	exit
+    }
+}
+
+# convert files to specified newline format, refusing to work with
+# directories and non-writable files
+for {set i 1} {$i < $argc} {incr i} {
+    set fn [lindex $argv $i]
+    if {![file isdirectory $fn] && [file writable $fn]} {
+        convert "$fn" $target
+    } elseif {[file isdirectory $fn]} {
+        puts "$fn\tis a directory, omitting"
+    } else {
+	puts "$fn\tpermission denied"
+    }
+}
+
+ 
